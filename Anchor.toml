@@ -1,11 +1,13 @@
-[programs.localnet]
-staking = "Fg6PaFpoGXkYsidMpWTK6W2BeZ7FEfcYkg476zPFsLnS"
+[features]
+seeds = false
+[programs.devnet]
+xfer = "7xhwkYESJV7nhXfh3GwgE7rBvUMgo1oibhfYhwMSojd4"
 
 [registry]
 url = "https://anchor.projectserum.com"
 
 [provider]
-cluster = "localnet"
+cluster = "devnet"
 wallet = "/Users/tomekregulski/.config/solana/id.json"
 
 [scripts]
