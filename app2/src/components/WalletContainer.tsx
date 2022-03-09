@@ -17,6 +17,7 @@ import { Metadata } from '@metaplex-foundation/mpl-token-metadata';
 import axios from 'axios';
 
 import TokenContainer from './TokenContainer';
+import StakedTokenContainer from './StakedTokenContainer';
 
 import idl from '../idl.json';
 import * as styles from '../styles/index';
@@ -48,7 +49,9 @@ const MyWallet: React.FC = () => {
     const [tokens, setTokens] = useState<any[]>([]);
     const [tokenAccountsArray, setTokenAccountsArray] = useState<any[]>([]);
     const [stakingTokens, setStakingTokens] = useState([]);
+    const [unstakingTokens, setUnstakingTokens] = useState([]);
     const [stakedTokens, setStakedTokens] = useState([]);
+    const [stakedTokenAccountsArray, setStakedTokenAccountsArray] = useState([]);
 
     const TEST_MINT = '9agr4P3EJ82iJn3vAr9YdfVmfDWgQSrSZMe3UxEDzSpY';
     const TEST_MINT_PK = new PublicKey(TEST_MINT);
@@ -92,6 +95,7 @@ const MyWallet: React.FC = () => {
     }, [stakingTokens]);
 
     const retrieveTokens = async () => {
+        // TODO: add filter for user
         const mints: [] = [];
         let userNfts: [] = [];
         const response = await connection.getParsedTokenAccountsByOwner(provider.wallet.publicKey, {
@@ -114,13 +118,13 @@ const MyWallet: React.FC = () => {
                     Object.keys(tokenmeta).length &&
                     tokenmeta.data.mint !== '4y9Mr1wgjzg4Yxiy12aszPoSguq9Q5TPpEnyT7FaVvfC'
                 ) {
-                    console.log(tokenmeta);
+                    // console.log(tokenmeta);
                     // @ts-ignore
                     tokenObj = [...tokenObj, tokenmeta];
                     const val = await axios.get(tokenmeta.data.data.uri);
                     // @ts-ignore
                     tokenObj = [...tokenObj, val];
-                    console.log(tokenObj);
+                    // console.log(tokenObj);
                     // @ts-ignore
                     userNfts = [...userNfts, tokenObj];
                 }
@@ -131,30 +135,33 @@ const MyWallet: React.FC = () => {
         console.log(userNfts);
         setNftData(userNfts);
         const allStakedTokens = await program.account.escrowAccount.all();
+
+        console.log('allStakedTokens');
         console.log(allStakedTokens);
         // @ts-ignore
         let stakedTokenList = [];
         for (const token in allStakedTokens) {
+            console.log('single staked token');
             console.log(allStakedTokens[token]);
             if (
                 allStakedTokens[token].account.mint.toString() !== 'coGMtFdR7CuV2sE7eor7w6hzTaEuEugQxu5zEqCF382' &&
                 allStakedTokens[token].account.mint.toString() !== 'GTno8oV1zaL2QaR9j7uMdCcmrVrq68eA33Dux96ePaFv'
             ) {
+                console.log('valid staked token');
+                console.log(allStakedTokens[token].account.mint.toString());
                 // @ts-ignore
-                let stakedTokenObj = [];
+                let stakedTokenObj = [allStakedTokens[token]];
                 try {
-                    const tokenmetaPubkey = await Metadata.getPDA(allStakedTokens[token].publicKey);
+                    const tokenmetaPubkey = await Metadata.getPDA(allStakedTokens[token].account.mint);
                     const tokenmeta = await Metadata.load(connection, tokenmetaPubkey);
+                    console.log(tokenmeta);
                     if (
                         Object.keys(tokenmeta).length &&
                         tokenmeta.data.mint !== '4y9Mr1wgjzg4Yxiy12aszPoSguq9Q5TPpEnyT7FaVvfC'
                     ) {
-                        console.log(tokenmeta);
-                        // @ts-ignore
-                        stakedTokenObj = [...stakedTokenObj, tokenmeta];
                         const val = await axios.get(tokenmeta.data.data.uri);
                         // @ts-ignore
-                        stakedTokenObj = [...stakedTokenObj, val];
+                        stakedTokenObj = [tokenmeta, val, ...stakedTokenObj];
                         console.log(stakedTokenObj);
                         // @ts-ignore
                         stakedTokenList = [...stakedTokenList, stakedTokenObj];
@@ -170,40 +177,28 @@ const MyWallet: React.FC = () => {
         setStakedTokens(stakedTokenList);
     };
 
-    const stakeToken = async () => {
-        const init = await initialize(connection, TEST_MINT_PK, provider);
-        console.log(init);
-        stake(provider, program);
-    };
-
     const stakeTokens = async () => {
-        const init = await initialize(connection, TEST_MINT_PK, provider);
-        console.log(init);
-        stakeMultipleTokens(provider, program, tokens);
+        if (tokenAccountsArray.length > 0) {
+            const init = await initialize(connection, TEST_MINT_PK, provider);
+            console.log(init);
+            await stakeMultipleTokens(provider, program, tokenAccountsArray);
+            retrieveTokens();
+        } else {
+            alert('Please select at least one token to stake');
+        }
     };
 
     const unstakeTokens = async () => {
+        // if (tokenAccountsArray.length > 0) {
         const init = await initialize(connection, TEST_MINT_PK, provider);
         console.log(init);
-        const allStakedTokens = await program.account.escrowAccount.all();
-        console.log(allStakedTokens);
 
-        unstakeMultipleTokens(provider, program, allStakedTokens);
-    };
-
-    const unstakeToken = async () => {
-        const init = await initialize(connection, TEST_MINT_PK, provider);
-        console.log(init);
-        unstake(provider, program);
-    };
-
-    const refreshStakedTokens = async () => {
-        const allStakedTokens = await program.account.escrowAccount.all();
-
-        console.log(allStakedTokens);
+        await unstakeMultipleTokens(provider, program, unstakingTokens);
+        retrieveTokens();
     };
 
     const mintValue = (val: string) => {
+        console.log(val);
         let tokenKeys = stakingTokens;
         // @ts-ignore
         if (stakingTokens.includes(val)) {
@@ -214,6 +209,20 @@ const MyWallet: React.FC = () => {
             tokenKeys = [...tokenKeys, val];
         }
         setStakingTokens(tokenKeys);
+    };
+    const selectUnstake = (val: []) => {
+        console.log(val);
+        let tokenKeys = unstakingTokens;
+        // @ts-ignore
+        if (unstakingTokens.includes(val)) {
+            tokenKeys = tokenKeys.filter((key) => key !== val);
+            // @ts-ignore
+        } else if (!unstakingTokens.includes(val)) {
+            // @ts-ignore
+            tokenKeys = [...tokenKeys, val];
+        }
+        console.log(tokenKeys);
+        setUnstakingTokens(tokenKeys);
     };
 
     return (
@@ -254,16 +263,13 @@ const MyWallet: React.FC = () => {
                                                 </button>
                                             </div>
                                         )}
-                                        <div style={{ margin: '10px 0' }}>
-                                            <button style={styles.btnStyle} onClick={refreshStakedTokens}>
-                                                Refresh Staked Tokens
-                                            </button>
-                                        </div>
-                                        <div style={{ margin: '10px 0' }}>
-                                            <button style={styles.btnStyle} onClick={unstakeTokens}>
-                                                Unstake Tokens
-                                            </button>
-                                        </div>
+                                        {unstakingTokens.length > 0 && (
+                                            <div style={{ margin: '10px 0' }}>
+                                                <button style={styles.btnStyle} onClick={unstakeTokens}>
+                                                    Unstake Tokens
+                                                </button>
+                                            </div>
+                                        )}
                                     </div>
                                     <div
                                         style={{
@@ -275,39 +281,41 @@ const MyWallet: React.FC = () => {
                                     >
                                         {nftData.length > 0 && (
                                             // @ts-config
-                                            <TokenContainer
-                                                selectedTokens={stakingTokens}
-                                                callback={mintValue}
-                                                tokens={nftData}
-                                            />
+                                            <div
+                                                style={{
+                                                    display: 'flex',
+                                                    flexDirection: 'column',
+                                                    justifyContent: 'center',
+                                                    alignItems: 'center',
+                                                }}
+                                            >
+                                                <h2>Available Tokens</h2>
+                                                <TokenContainer
+                                                    selectedTokens={stakingTokens}
+                                                    callback={mintValue}
+                                                    tokens={nftData}
+                                                />
+                                            </div>
                                         )}
                                         {stakedTokens.length > 0 && (
                                             // @ts-config
-                                            <TokenContainer
-                                                selectedTokens={stakingTokens}
-                                                callback={mintValue}
-                                                tokens={stakedTokens}
-                                            />
+                                            <div
+                                                style={{
+                                                    display: 'flex',
+                                                    flexDirection: 'column',
+                                                    justifyContent: 'center',
+                                                    alignItems: 'center',
+                                                }}
+                                            >
+                                                <h2>Staked Tokens</h2>
+                                                <StakedTokenContainer
+                                                    selectedTokens={unstakingTokens}
+                                                    callback={selectUnstake}
+                                                    tokens={stakedTokens}
+                                                />
+                                            </div>
                                         )}
                                     </div>
-                                    {wallet && stakingTokens.length > 0 ? (
-                                        <div
-                                            style={{
-                                                marginTop: '30px',
-                                                display: 'flex',
-                                                flexDirection: 'column',
-                                                justifyContent: 'center',
-                                                alignItems: 'center',
-                                            }}
-                                        >
-                                            <button onClick={stakeToken} style={styles.btnStyle}>
-                                                Stake Token
-                                            </button>
-                                            <button onClick={unstakeToken} style={styles.btnStyle}>
-                                                Unstake Token
-                                            </button>
-                                        </div>
-                                    ) : null}
                                 </div>
                             </div>
                         ) : (
