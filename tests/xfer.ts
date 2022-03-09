@@ -2,18 +2,26 @@ import * as anchor from '@project-serum/anchor';
 import { Program } from '@project-serum/anchor';
 import { Xfer } from '../target/types/xfer';
 import { PublicKey, SystemProgram, Transaction } from '@solana/web3.js';
-import { TOKEN_PROGRAM_ID, getMint, getAccount } from '@solana/spl-token';
+import {
+  TOKEN_PROGRAM_ID,
+  createMint,
+  getMint,
+  createAssociatedTokenAccount,
+  getAccount,
+  mintToChecked,
+  transferChecked,
+} from '@solana/spl-token';
 import { assert } from 'chai';
-import 'dotenv';
+// import { Metadata } from '@metaplex-foundation/mpl-token-metadata';
 
 import {
   ownerWalletKeypair,
   payerKeypair,
   escrowWalletKeypair,
   escrowWallet2Keypair,
+  rewardMintAuthorityKeypair,
 } from './utils/users';
-
-// TODO: write assertions and fail-case tests
+import { token } from '@project-serum/anchor/dist/cjs/utils';
 
 describe('xfer', () => {
   // Configure the client to use the local cluster.
@@ -22,118 +30,187 @@ describe('xfer', () => {
 
   const program = anchor.workspace.Xfer as Program<Xfer>;
 
-  let token_mint = process.env.TOKEN_MINT_A;
-  let tokenPk = new PublicKey(token_mint);
-
-  let nftAccount;
-  let initializerNFTAccount;
-  let nftTokenAccount;
-
-  let vault_account_pda = null;
-  let vault_account_bump = null;
-  let vault_authority_pda = null;
+  // Reward Mint
+  const rewardMint = '5wwzrurTXDNHDDrHw2PS78Ev38Hd9f7askUeVzDsnnQ7';
+  const rewardMintPk = new PublicKey(rewardMint);
+  let ownerRewardAta;
+  // Stuck token
+  // const testMint = new PublicKey(
+  //   '9agr4P3EJ82iJn3vAr9YdfVmfDWgQSrSZMe3UxEDzSpY'
+  // );
 
   const initializerAmount = 1;
-  const escrowAccount = escrowWalletKeypair; // 1
-  // const escrowAccount = escrowWallet2Keypair; // 2
+  console.log('/////////');
+  const payer = payerKeypair;
+  console.log(payer.publicKey.toString());
+  const mintAuthority = anchor.web3.Keypair.generate();
+  console.log(mintAuthority.publicKey.toString());
   const initializerMainAccount = ownerWalletKeypair;
+  console.log(initializerMainAccount.publicKey.toString());
+  console.log('/////////');
+
+  let tokens = null;
+
+  const tokenArray = [
+    // stuck token
+    // new PublicKey('4y9Mr1wgjzg4Yxiy12aszPoSguq9Q5TPpEnyT7FaVvfC'),
+    new PublicKey('mpPGBiedL26AMGz58EKaLR1X692eVD6QoXwxXm6LWjX'),
+    new PublicKey('2snK4sppZMRpLMvnGxPiXxCvmbdhtaVCHkPTxZmCq7AZ'),
+    new PublicKey('AzNjw6AtwrEd36Ec42Cn5GosDe7CHJwfeuoZpx7Mz1Nm'),
+  ];
+
+  const tokenAccountsArray = [];
+
+  const findTokenAccount = async (tokenPk) => {
+    const tokenAccount = await getMint(provider.connection, tokenPk);
+    tokenAccountsArray.push(tokenAccount);
+  };
+
+  const findTokenAccounts = async (array) => {
+    const results = [];
+    for (const token of array) {
+      const ATA = (
+        await provider.connection.getParsedTokenAccountsByOwner(
+          initializerMainAccount.publicKey as PublicKey,
+          {
+            mint: token as PublicKey,
+          }
+        )
+      ).value;
+      results.push(ATA[0]);
+    }
+    return results;
+  };
 
   it('Initializes program state', async () => {
-    console.log('nft account');
-    nftAccount = await getMint(provider.connection, tokenPk);
-    console.log(nftAccount); // === mintAccount
-    console.log(nftAccount.address.toString());
+    tokens = await findTokenAccounts(tokenArray);
+    console.log('array of ATAs');
+    console.log(tokens);
+  });
 
-    initializerNFTAccount = (
-      await provider.connection.getParsedTokenAccountsByOwner(
-        initializerMainAccount.publicKey as PublicKey,
+  it('Transfers the selected tokens', async () => {
+    for (const token of tokens) {
+      console.log(token);
+      // console.log(token.account.data);
+      // NFT TOKEN ACCOUNT
+      const tokenAccount = await getAccount(provider.connection, token.pubkey);
+      console.log(tokenAccount);
+
+      const tokenMintPk = token.account.data.parsed.info.mint;
+      const tokenPk = new PublicKey(tokenMintPk);
+
+      const escrowTest = anchor.web3.Keypair.generate();
+
+      const [_vault_account_pda, _vault_account_bump] =
+        await PublicKey.findProgramAddress(
+          [
+            Buffer.from(anchor.utils.bytes.utf8.encode('vault')),
+            tokenPk.toBuffer(),
+          ],
+          program.programId
+        );
+
+      const vault_account_pda = _vault_account_pda;
+      const vault_account_bump = _vault_account_bump;
+
+      console.log('Vault Account');
+      console.log(vault_account_pda.toString());
+
+      console.log('attempting transfer...');
+
+      await program.rpc.initialize(
+        vault_account_bump,
+        new anchor.BN(initializerAmount),
         {
-          mint: tokenPk as PublicKey,
+          accounts: {
+            initializer: initializerMainAccount.publicKey,
+            mint: tokenPk,
+            vaultAccount: vault_account_pda,
+            initializerDepositTokenAccount: tokenAccount.address, /////////////
+            escrowAccount: escrowTest.publicKey,
+            escrowAccountPk: escrowTest.publicKey,
+            systemProgram: anchor.web3.SystemProgram.programId,
+            rent: anchor.web3.SYSVAR_RENT_PUBKEY,
+            tokenProgram: TOKEN_PROGRAM_ID,
+          },
+          instructions: [
+            await program.account.escrowAccount.createInstruction(escrowTest),
+          ],
+          signers: [escrowTest, initializerMainAccount],
         }
-      )
-    ).value;
+      );
+    }
 
-    nftTokenAccount = await getAccount(
-      provider.connection,
-      initializerNFTAccount[0].pubkey
-    );
+    console.log('tranfers successful!');
+
+    let allStakedTokens = await program.account.escrowAccount.all();
+
+    console.log(allStakedTokens);
+    console.log('/////////////////////////');
   });
 
-  it('Initializes transfer', async () => {
-    // TODO: need PDA seeds to be more specific
-    const [_vault_account_pda, _vault_account_bump] =
-      await PublicKey.findProgramAddress(
-        [Buffer.from(anchor.utils.bytes.utf8.encode('vault'))],
-        program.programId
-      );
-    vault_account_pda = _vault_account_pda;
-    vault_account_bump = _vault_account_bump;
-
-    const [_vault_authority_pda, _vault_authority_bump] =
-      await PublicKey.findProgramAddress(
-        [Buffer.from(anchor.utils.bytes.utf8.encode('escrow'))],
-        program.programId
-      );
-
-    console.log('attempting transfer...');
-
-    await program.rpc.initialize(
-      vault_account_bump,
-      new anchor.BN(initializerAmount),
-      {
-        accounts: {
-          initializer: initializerMainAccount.publicKey,
-          mint: nftAccount.address,
-          vaultAccount: vault_account_pda,
-          initializerDepositTokenAccount: nftTokenAccount.address,
-          escrowAccount: escrowAccount.publicKey,
-          systemProgram: anchor.web3.SystemProgram.programId,
-          rent: anchor.web3.SYSVAR_RENT_PUBKEY,
-          tokenProgram: TOKEN_PROGRAM_ID,
-        },
-        instructions: [
-          await program.account.escrowAccount.createInstruction(escrowAccount),
-        ],
-        signers: [escrowAccount, initializerMainAccount],
-      }
-    );
-
-    console.log('tranfer successful!');
-
-    nftTokenAccount = await getAccount(
-      provider.connection,
-      initializerNFTAccount[0].pubkey
-    );
-    console.log(nftTokenAccount);
-
-    vault_authority_pda = _vault_authority_pda;
-
-    let _escrowAccount = await program.account.escrowAccount.fetch(
-      escrowAccount.publicKey
-    );
-
-    console.log(_escrowAccount);
-  });
-  it('Cancels', async () => {
-    console.log('attempting cancel...');
-    await program.rpc.cancel({
-      accounts: {
-        initializer: initializerMainAccount.publicKey,
-        initializerDepositTokenAccount: nftTokenAccount.address,
-        vaultAccount: vault_account_pda,
-        vaultAuthority: vault_authority_pda,
-        escrowAccount: escrowAccount.publicKey,
-        tokenProgram: TOKEN_PROGRAM_ID,
-      },
-      signers: [initializerMainAccount],
+  it('Unstakes all tokens', async () => {
+    let allStakedTokens = await program.account.escrowAccount.all();
+    let unstakeMints = allStakedTokens.map((token) => {
+      return token.account.mint;
     });
 
-    console.log('cancel successful!');
+    console.log('all');
+    console.log(allStakedTokens);
+    console.log('unstake mint');
+    console.log(unstakeMints);
 
-    nftTokenAccount = await getAccount(
-      provider.connection,
-      initializerNFTAccount[0].pubkey
-    );
-    console.log(nftTokenAccount);
+    console.log('attempting unstake...');
+
+    for (const stakedToken of allStakedTokens) {
+      if (
+        stakedToken.publicKey.toString() !==
+          'coGMtFdR7CuV2sE7eor7w6hzTaEuEugQxu5zEqCF382' &&
+        stakedToken.publicKey.toString() !==
+          'GTno8oV1zaL2QaR9j7uMdCcmrVrq68eA33Dux96ePaFv'
+      ) {
+        console.log(stakedToken.publicKey.toString());
+        const [_vault_account_pda, _vault_account_bump] =
+          await PublicKey.findProgramAddress(
+            [
+              Buffer.from(anchor.utils.bytes.utf8.encode('vault')),
+              stakedToken.account.mint.toBuffer(),
+            ],
+            program.programId
+          );
+        const vault_account_pda = _vault_account_pda;
+        const vault_account_bump = _vault_account_bump;
+        console.log(vault_account_pda);
+        console.log(vault_account_bump);
+
+        const [_vault_authority_pda, _vault_authority_bump] =
+          await PublicKey.findProgramAddress(
+            [Buffer.from(anchor.utils.bytes.utf8.encode('escrow'))],
+            program.programId
+          );
+
+        const vault_authority_pda = _vault_authority_pda;
+
+        await program.rpc.cancel({
+          accounts: {
+            initializer: initializerMainAccount.publicKey,
+            mint: stakedToken.account.mint, // variable - escrowItem.mint
+            initializerDepositTokenAccount:
+              stakedToken.account.initializerDepositTokenAccount, // variable | escrowItem.initializer_deposit_token_account
+            vaultAccount: vault_account_pda, // variable | above
+            vaultAuthority: vault_authority_pda, // variable | above
+            escrowAccount: stakedToken.publicKey, // variable | escrowItem.escrow_pk
+            tokenProgram: TOKEN_PROGRAM_ID,
+          },
+          signers: [initializerMainAccount],
+        });
+      } else {
+        console.log('stuck token');
+      }
+    }
+
+    let _allEscrow = await program.account.escrowAccount.all();
+
+    console.log(_allEscrow);
   });
 });
