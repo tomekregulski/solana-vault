@@ -54,10 +54,14 @@ describe('xfer', () => {
   const tokenArray = [
     // stuck token
     // new PublicKey('4y9Mr1wgjzg4Yxiy12aszPoSguq9Q5TPpEnyT7FaVvfC'),
-    new PublicKey('mpPGBiedL26AMGz58EKaLR1X692eVD6QoXwxXm6LWjX'),
-    new PublicKey('2snK4sppZMRpLMvnGxPiXxCvmbdhtaVCHkPTxZmCq7AZ'),
+    // new PublicKey('mpPGBiedL26AMGz58EKaLR1X692eVD6QoXwxXm6LWjX'),
+    // new PublicKey('2snK4sppZMRpLMvnGxPiXxCvmbdhtaVCHkPTxZmCq7AZ'),
     new PublicKey('AzNjw6AtwrEd36Ec42Cn5GosDe7CHJwfeuoZpx7Mz1Nm'),
   ];
+
+  const tempToken = new PublicKey(
+    'AzNjw6AtwrEd36Ec42Cn5GosDe7CHJwfeuoZpx7Mz1Nm'
+  );
 
   const tokenAccountsArray = [];
 
@@ -86,6 +90,14 @@ describe('xfer', () => {
     tokens = await findTokenAccounts(tokenArray);
     console.log('array of ATAs');
     console.log(tokens);
+    let _allEscrow = await program.account.escrowAccount.all();
+
+    // _allEscrow.forEach((escrow) => {
+    //   console.log(escrow);
+    //   console.log(escrow.account.created.toString());
+    //   console.log(escrow.account.totalRewardCollected.toString());
+    //   console.log(Math.floor(Date.now() / 1000));
+    // });
   });
 
   it('Transfers the selected tokens', async () => {
@@ -147,6 +159,87 @@ describe('xfer', () => {
 
     console.log(allStakedTokens);
     console.log('/////////////////////////');
+  });
+
+  it('Distributes rewards to stakers', async () => {
+    console.log('attempting distribution...');
+
+    let rewardMintAccount = await getMint(provider.connection, rewardMintPk);
+    console.log('rewardMintAccount');
+    console.log(rewardMintAccount);
+
+    let _allEscrow = await program.account.escrowAccount.all();
+    let unstakeMint = _allEscrow.filter(
+      (token) => token.account.mint.toString() === tempToken.toString()
+    );
+    console.log('from escrow filter');
+    console.log(unstakeMint[0].account.initializerKey);
+    console.log('from ownerWallet');
+    console.log(ownerWalletKeypair.publicKey);
+
+    // console.log('ownerWallet ATA');
+    // ownerRewardAta = (
+    //   await provider.connection.getParsedTokenAccountsByOwner(
+    //     ownerWalletKeypair.publicKey as PublicKey,
+    //     {
+    //       mint: rewardMintPk as PublicKey,
+    //     }
+    //   )
+    // ).value;
+
+    // console.log('ownerRewardAta');
+    // console.log(ownerRewardAta);
+    // let tokenAccount = await getAccount(
+    //   provider.connection,
+    //   ownerRewardAta[0].pubkey
+    // );
+    // console.log('tokenAccount');
+    // console.log(tokenAccount);
+
+    console.log('retrieved from escrow ATA');
+    let retrievedRewardAta = (
+      await provider.connection.getParsedTokenAccountsByOwner(
+        ownerWalletKeypair.publicKey as PublicKey,
+        {
+          mint: rewardMintPk as PublicKey,
+        }
+      )
+    ).value;
+
+    // console.log('retrievedRewardAta');
+    // console.log(ownerRewardAta);
+    let retrievedTokenAccount = await getAccount(
+      provider.connection,
+      retrievedRewardAta[0].pubkey
+    );
+    console.log('retrievedTokenAccount');
+    console.log(retrievedTokenAccount);
+
+    console.log('/////////');
+    console.log(rewardMintAuthorityKeypair.publicKey);
+    console.log(initializerMainAccount.publicKey);
+    console.log(unstakeMint[0].account.initializerDepositTokenAccount);
+    console.log(unstakeMint[0].publicKey);
+    console.log(rewardMintPk);
+    console.log(retrievedRewardAta[0].pubkey);
+    console.log('/////////');
+    console.log(unstakeMint[0]);
+
+    await program.rpc.distribute(new anchor.BN(500), {
+      accounts: {
+        authority: rewardMintAuthorityKeypair.publicKey,
+        // @ts-ignore
+        initializer: initializerMainAccount.publicKey,
+        initializerDepositTokenAccount:
+          unstakeMint[0].account.initializerDepositTokenAccount,
+        escrowAccount: unstakeMint[0].publicKey,
+        mint: rewardMintPk,
+        to: retrievedRewardAta[0].pubkey,
+        tokenProgram: TOKEN_PROGRAM_ID,
+      },
+    });
+
+    console.log('success');
   });
 
   it('Unstakes all tokens', async () => {

@@ -195,9 +195,11 @@ export const stakeMultipleTokens = async (provider: Provider, program, tokens) =
 
         console.log('attempting transfer...');
 
-        await program.rpc.initialize(vault_account_bump, new anchor.BN(initializerAmount), {
+        const sender = program.provider.wallet;
+
+        const tx = await program.transaction.initialize(vault_account_bump, new anchor.BN(initializerAmount), {
             accounts: {
-                initializer: initializerMainAccount.publicKey,
+                initializer: sender.publicKey,
                 mint: tokenPk,
                 vaultAccount: vault_account_pda,
                 initializerDepositTokenAccount: tokenAccount.address, /////////////
@@ -208,8 +210,34 @@ export const stakeMultipleTokens = async (provider: Provider, program, tokens) =
                 tokenProgram: TOKEN_PROGRAM_ID,
             },
             instructions: [await program.account.escrowAccount.createInstruction(escrowTest)],
-            signers: [escrowTest, initializerMainAccount],
+            signers: [escrowTest, sender],
         });
+        tx.feePayer = await program.provider.wallet.publicKey;
+        const blockhashObj = await provider.connection.getRecentBlockhash();
+        tx.recentBlockhash = await blockhashObj.blockhash;
+        tx.sign(escrowTest);
+        const signedTransaction = await program.provider.wallet.signTransaction(tx);
+        console.log(signedTransaction);
+        // // @ts-ignore
+        const test = signedTransaction.serialize();
+        const transactionId = await provider.connection.sendRawTransaction(test);
+        console.log(transactionId);
+
+        // await program.rpc.initialize(vault_account_bump, new anchor.BN(initializerAmount), {
+        //     accounts: {
+        //         initializer: initializerMainAccount.publicKey,
+        //         mint: tokenPk,
+        //         vaultAccount: vault_account_pda,
+        //         initializerDepositTokenAccount: tokenAccount.address, /////////////
+        //         escrowAccount: escrowTest.publicKey,
+        //         escrowAccountPk: escrowTest.publicKey,
+        //         systemProgram: anchor.web3.SystemProgram.programId,
+        //         rent: anchor.web3.SYSVAR_RENT_PUBKEY,
+        //         tokenProgram: TOKEN_PROGRAM_ID,
+        //     },
+        //     instructions: [await program.account.escrowAccount.createInstruction(escrowTest)],
+        //     signers: [escrowTest, initializerMainAccount],
+        // });
     }
 
     console.log('tranfers successful!');
@@ -247,10 +275,36 @@ export const collectTokenRewards = async (provider: Provider, program, token) =>
     // @ts-ignore
     console.log(ownerRewardTokenAccount.address);
 
+    const sender = program.provider.wallet;
+
+    // const tx = await program.transaction.distribute(new anchor.BN(duration), {
+    //     accounts: {
+    //         authority: rewardMintAuthorityKeypair.publicKey,
+    //         initializer: initializerMainAccount.publicKey,
+    //         initializerDepositTokenAccount: token[2].account.initializerDepositTokenAccount,
+    //         escrowAccount: token[2].account.escrowPk,
+    //         mint: rewardMintPk,
+    //         to: ownerRewardAta[0].pubkey,
+    //         tokenProgram: TOKEN_PROGRAM_ID,
+    //     },
+    //     signers: [rewardMintAuthorityKeypair, sender],
+    // });
+    // tx.feePayer = await program.provider.wallet.publicKey;
+    // const blockhashObj = await provider.connection.getRecentBlockhash();
+    // tx.recentBlockhash = await blockhashObj.blockhash;
+    // tx.sign(rewardMintAuthorityKeypair);
+    // const signedTransaction = await program.provider.wallet.signTransaction(tx);
+    // console.log(signedTransaction);
+
+    // // // @ts-ignore
+    // const test = signedTransaction.serialize();
+    // const transactionId = await provider.connection.sendRawTransaction(test);
+    // console.log(transactionId);
+
     await program.rpc.distribute(new anchor.BN(duration), {
         accounts: {
             authority: rewardMintAuthorityKeypair.publicKey,
-            initializer: initializerMainAccount.publicKey,
+            initializer: sender.publicKey,
             initializerDepositTokenAccount: token[2].account.initializerDepositTokenAccount,
             escrowAccount: token[2].account.escrowPk,
             mint: rewardMintPk,
@@ -297,10 +351,11 @@ export const unstakeMultipleTokens = async (provider: Provider, program, tokens)
             );
 
             const vault_authority_pda = _vault_authority_pda;
+            const sender = program.provider.wallet;
 
-            await program.rpc.cancel({
+            const tx = await program.transaction.cancel({
                 accounts: {
-                    initializer: initializerMainAccount.publicKey,
+                    initializer: sender.publicKey,
                     mint: stakedToken.account.mint, // variable - escrowItem.mint
                     initializerDepositTokenAccount: stakedToken.account.initializerDepositTokenAccount, // variable | escrowItem.initializer_deposit_token_account
                     vaultAccount: vault_account_pda, // variable | above
@@ -308,8 +363,30 @@ export const unstakeMultipleTokens = async (provider: Provider, program, tokens)
                     escrowAccount: stakedToken.publicKey, // variable | escrowItem.escrow_pk
                     tokenProgram: TOKEN_PROGRAM_ID,
                 },
-                signers: [initializerMainAccount],
+                signers: [sender],
             });
+            tx.feePayer = await program.provider.wallet.publicKey;
+            const blockhashObj = await provider.connection.getRecentBlockhash();
+            tx.recentBlockhash = await blockhashObj.blockhash;
+            const signedTransaction = await program.provider.wallet.signTransaction(tx);
+            console.log(signedTransaction);
+            // // @ts-ignore
+            const test = signedTransaction.serialize();
+            const transactionId = await provider.connection.sendRawTransaction(test);
+            console.log(transactionId);
+
+            // await program.rpc.cancel({
+            //     accounts: {
+            //         initializer: initializerMainAccount.publicKey,
+            //         mint: stakedToken.account.mint, // variable - escrowItem.mint
+            //         initializerDepositTokenAccount: stakedToken.account.initializerDepositTokenAccount, // variable | escrowItem.initializer_deposit_token_account
+            //         vaultAccount: vault_account_pda, // variable | above
+            //         vaultAuthority: vault_authority_pda, // variable | above
+            //         escrowAccount: stakedToken.publicKey, // variable | escrowItem.escrow_pk
+            //         tokenProgram: TOKEN_PROGRAM_ID,
+            //     },
+            //     signers: [initializerMainAccount],
+            // });
         } else {
             console.log('stuck token');
         }

@@ -2,14 +2,20 @@ use anchor_lang::prelude::*;
 use anchor_spl::token::{self, CloseAccount, Mint, SetAuthority, MintTo, TokenAccount, Transfer};
 use spl_token::instruction::AuthorityType;
 
+
+
 declare_id!("7xhwkYESJV7nhXfh3GwgE7rBvUMgo1oibhfYhwMSojd4");
+
+const ESCROW_PDA_SEED: &[u8] = b"escrow";
+const REWARD_RATE: u64 = 5;
 
 #[program]
 pub mod xfer {
     use super::*;
-    const ESCROW_PDA_SEED: &[u8] = b"escrow";
     pub fn initialize(ctx: Context<Initialize>, _vault_account_bump: u8, 
         initializer_amount: u64, ) -> ProgramResult {
+        let clock: Clock = Clock::get().unwrap();
+
         ctx.accounts.escrow_account.initializer_key = *ctx.accounts.initializer.key;
         ctx.accounts
             .escrow_account
@@ -21,6 +27,10 @@ pub mod xfer {
         ctx.accounts.escrow_account.initializer_amount = initializer_amount;
         ctx.accounts.escrow_account.escrow_pk = *ctx.accounts.escrow_account_pk.to_account_info().key;
         ctx.accounts.escrow_account.mint = *ctx.accounts.mint.to_account_info().key;
+
+        ctx.accounts.escrow_account.created = clock.unix_timestamp;
+        ctx.accounts.escrow_account.last_reward_collection = clock.unix_timestamp;
+        ctx.accounts.escrow_account.total_reward_collected = 0;
 
         let (vault_authority, _vault_authority_bump) =
             Pubkey::find_program_address(&[ESCROW_PDA_SEED], ctx.program_id);
@@ -37,13 +47,17 @@ pub mod xfer {
         Ok(())
     }
 
-    pub fn distribute(ctx: Context<Distribute>, count: u64) -> ProgramResult {
-        let mint_amount = 5;
-        let volume: u64 = mint_amount * count;
-        token::mint_to(ctx.accounts.into_mint_to_staker(), volume).unwrap();
+    pub fn distribute(ctx: Context<Distribute>, duration: u64) -> ProgramResult {
+        let clock: Clock = Clock::get().unwrap();
+        let amount: u64 = REWARD_RATE * duration;
+        token::mint_to(ctx.accounts.into_mint_to_staker(), amount).unwrap();
+
+        ctx.accounts.escrow_account.last_reward_collection = clock.unix_timestamp;
+        ctx.accounts.escrow_account.total_reward_collected = ctx.accounts.escrow_account.total_reward_collected + amount;
 
         Ok(())
     }
+
 
     pub fn cancel(ctx: Context<Cancel>) -> ProgramResult {
         
@@ -119,11 +133,40 @@ pub struct Initialize<'info> {
     pub token_program: AccountInfo<'info>,
 }
 
+// #[derive(Accounts)]
+// pub struct TokenReceipt<'info> {
+//     /// CHECK: checking
+//     #[account(signer)]
+//     pub authority: AccountInfo<'info>,
+//     /// CHECK: checking
+//     #[account(mut)]
+//     pub escrow_account: Box<Account<'info, EscrowAccount>>,
+//     /// CHECK: checking
+//     #[account(mut)]
+//     pub mint: AccountInfo<'info>,
+//     /// CHECK: checking
+//     #[account(mut)]
+//     pub to: AccountInfo<'info>,
+//     /// CHECK: checking
+//     pub token_program: AccountInfo<'info>,
+// }
+
 #[derive(Accounts)]
 pub struct Distribute<'info> {
     /// CHECK: checking
     #[account(signer)]
     pub authority: AccountInfo<'info>,
+    /// CHECK: checking
+    pub initializer: AccountInfo<'info>, // Signer of InitialEscrow instruction. To be stored in EscrowAccount
+    #[account(mut)] // Executes the given code as a constraint. The expression should evaluate to a boolean
+    pub initializer_deposit_token_account: Account<'info, TokenAccount>, // The account of TokenProgram
+    /// CHECK: checking
+    #[account(
+        mut,
+        constraint = escrow_account.initializer_key == *initializer.key,
+        constraint = escrow_account.initializer_deposit_token_account == *initializer_deposit_token_account.to_account_info().key,
+    )] // close = <target\> // Marks the account as being closed at the end of the instruction’s execution, sending the rent exemption lamports to the specified
+    pub escrow_account: Box<Account<'info, EscrowAccount>>,
     /// CHECK: checking
     #[account(mut)]
     pub mint: AccountInfo<'info>,
@@ -173,10 +216,23 @@ pub struct EscrowAccount {
     pub initializer_key: Pubkey, // To authorize the actions properly
     pub initializer_deposit_token_account: Pubkey, // To record the deposit account of initialzer
     // pub initializer_receive_token_account: Pubkey, // To record the receiving account of initializer
-    pub initializer_amount: u64, // To record how much token should the initializer transfer to taker
+    pub initializer_amount: u64, // To record how much token should the initializer transfer to taker // ????????
     pub escrow_pk: Pubkey,
     pub mint: Pubkey,
+    pub created: i64,
+    pub last_reward_collection: i64,
+    pub total_reward_collected: u64,
 }
+
+// #[account]
+// pub struct TokenReceipt {
+//     pub initializer_key: Pubkey, // To authorize the actions properly
+//     pub escrow_pk: Pubkey,
+//     pub mint: Pubkey,
+//     pub created: i64,
+//     pub last_reward_collection: i64,
+//     pub total_reward_collected: u64,
+// }
 
 
 impl<'info> Initialize<'info> {
