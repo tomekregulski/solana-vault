@@ -153,8 +153,6 @@ const MyWallet: React.FC = () => {
         // @ts-ignore
         let stakedTokenList = [];
         for (const token in allStakedTokens) {
-            // console.log('single staked token');
-            // console.log(allStakedTokens[token]);
             if (
                 allStakedTokens[token].account.mint.toString() !== 'coGMtFdR7CuV2sE7eor7w6hzTaEuEugQxu5zEqCF382' &&
                 allStakedTokens[token].account.mint.toString() !== 'GTno8oV1zaL2QaR9j7uMdCcmrVrq68eA33Dux96ePaFv' &&

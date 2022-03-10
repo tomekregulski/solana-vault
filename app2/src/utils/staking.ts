@@ -1,11 +1,13 @@
 import * as anchor from '@project-serum/anchor';
 import { Provider } from '@project-serum/anchor';
 import idl from '../idl.json';
-import { PublicKey, Connection } from '@solana/web3.js';
+import { PublicKey, Connection, Transaction } from '@solana/web3.js';
 import {
     TOKEN_PROGRAM_ID,
     getMint,
-    // createAssociatedTokenAccount,
+    createAssociatedTokenAccount,
+    createAssociatedTokenAccountInstruction,
+    getAssociatedTokenAddress,
     getAccount,
 } from '@solana/spl-token';
 import { ownerWalletKeypair, payerKeypair, escrowWalletKeypair, rewardMintAuthorityKeypair } from './utils/users';
@@ -260,22 +262,72 @@ export const collectTokenRewards = async (provider: Provider, program, token) =>
     console.log('rewardMintAccount');
     console.log(rewardMintAccount);
 
-    const ownerRewardAta = (
+    console.log(program.provider.wallet.publicKey);
+    let ownerRewardAta;
+    ownerRewardAta = (
         await provider.connection.getParsedTokenAccountsByOwner(program.provider.wallet.publicKey as PublicKey, {
             mint: rewardMintPk as PublicKey,
         })
     ).value;
 
-    const ownerRewardTokenAccount = await getAccount(provider.connection, ownerRewardAta[0].pubkey);
+    const sender = program.provider.wallet;
+    console.log(ownerRewardAta);
 
+    if (ownerRewardAta.length === 0) {
+        const toAta = await getAssociatedTokenAddress(
+            rewardMintPk, // mint
+            sender.publicKey // owner
+        );
+        console.log(`ATA: ${toAta.toBase58()}`);
+
+        const toTx = new Transaction().add(
+            createAssociatedTokenAccountInstruction(
+                provider.wallet.publicKey, // payer
+                toAta, // ata
+                sender.publicKey, // owner
+                rewardMintPk // mint
+            )
+        );
+        toTx.feePayer = await provider.wallet.publicKey;
+        console.log(toTx);
+        const blockhashObj = await provider.connection.getRecentBlockhash();
+        toTx.recentBlockhash = await blockhashObj.blockhash;
+        const signedTransaction2 = await provider.wallet.signTransaction(toTx);
+        console.log(signedTransaction2);
+        // // // @ts-ignore
+        const test = signedTransaction2.serialize();
+        const transactionId2 = await provider.connection.sendRawTransaction(test);
+        console.log(transactionId2);
+        console.log(`txhash: ${await program.connection.sendTransaction(toTx, [provider.wallet])}`);
+        // const ata = await createAssociatedTokenAccount(
+        //     program.connection, // connection
+        //     rewardMintAuthorityKeypair, // fee payer
+        //     rewardMintPk, // mint
+        //     sender.publicKey // owner,
+        // );
+        ownerRewardAta = (
+            await provider.connection.getParsedTokenAccountsByOwner(program.provider.wallet.publicKey as PublicKey, {
+                mint: rewardMintPk as PublicKey,
+            })
+        ).value;
+    }
+
+    console.log(ownerRewardAta);
+    // @ts-ignore
+    const ownerRewardTokenAccount = await getAccount(provider.connection, ownerRewardAta[0].pubkey);
+    console.log('/////////////');
+    console.log(token);
+    console.log(sender.publicKey);
     console.log(rewardMintAuthorityKeypair.publicKey);
     console.log(token[2].account.escrowPk);
     console.log(rewardMintPk);
+    // @ts-ignore
     console.log(ownerRewardAta[0].pubkey);
+    console.log(ownerRewardAta[0]);
     // @ts-ignore
     console.log(ownerRewardTokenAccount.address);
-
-    const sender = program.provider.wallet;
+    console.log(token[2].account.initializerDepositTokenAccount);
+    console.log('/////////////');
 
     // const tx = await program.transaction.distribute(new anchor.BN(duration), {
     //     accounts: {
@@ -301,19 +353,21 @@ export const collectTokenRewards = async (provider: Provider, program, token) =>
     // const transactionId = await provider.connection.sendRawTransaction(test);
     // console.log(transactionId);
 
-    await program.rpc.distribute(new anchor.BN(duration), {
+    const tx = await program.rpc.distribute(new anchor.BN(duration), {
         accounts: {
             authority: rewardMintAuthorityKeypair.publicKey,
             initializer: sender.publicKey,
             initializerDepositTokenAccount: token[2].account.initializerDepositTokenAccount,
             escrowAccount: token[2].account.escrowPk,
             mint: rewardMintPk,
+            // @ts-ignore
             to: ownerRewardAta[0].pubkey,
             tokenProgram: TOKEN_PROGRAM_ID,
         },
         signers: [rewardMintAuthorityKeypair],
     });
     console.log('collection successful');
+    console.log(tx);
 };
 
 // @ts-ignore
