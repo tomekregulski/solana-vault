@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useAnchorWallet } from '@solana/wallet-adapter-react';
 import { WalletModalProvider, WalletMultiButton } from '@solana/wallet-adapter-react-ui';
+import * as anchor from '@project-serum/anchor';
 
 import { preflightCommitment, programID, getNft } from '../utils/index';
 import {
@@ -10,7 +11,7 @@ import {
     // Transaction,
     Keypair,
 } from '@solana/web3.js';
-import { TOKEN_PROGRAM_ID } from '@solana/spl-token';
+import { TOKEN_PROGRAM_ID, getMint, getAccount } from '@solana/spl-token';
 import { Program, Provider } from '@project-serum/anchor';
 import { Metadata } from '@metaplex-foundation/mpl-token-metadata';
 
@@ -24,7 +25,14 @@ import * as styles from '../styles/index';
 
 // import * as bs58 from 'bs58';
 
-import { initialize, stake, unstake, stakeMultipleTokens, unstakeMultipleTokens } from '../utils/staking';
+import {
+    initialize,
+    stake,
+    unstake,
+    collectTokenRewards,
+    stakeMultipleTokens,
+    unstakeMultipleTokens,
+} from '../utils/staking';
 
 // import { useWalletNfts } from '@nfteyez/sol-rayz-react';
 // import type { Options } from '@nfteyez/sol-rayz';
@@ -34,13 +42,13 @@ import { initialize, stake, unstake, stakeMultipleTokens, unstakeMultipleTokens 
 //   'ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL'
 // );
 // let tokens = null;
-const tokenArray = [
-    // stuck token
-    // new PublicKey('4y9Mr1wgjzg4Yxiy12aszPoSguq9Q5TPpEnyT7FaVvfC'),
-    new PublicKey('mpPGBiedL26AMGz58EKaLR1X692eVD6QoXwxXm6LWjX'),
-    new PublicKey('2snK4sppZMRpLMvnGxPiXxCvmbdhtaVCHkPTxZmCq7AZ'),
-    new PublicKey('AzNjw6AtwrEd36Ec42Cn5GosDe7CHJwfeuoZpx7Mz1Nm'),
-];
+// const tokenArray = [
+//     // stuck token
+//     // new PublicKey('4y9Mr1wgjzg4Yxiy12aszPoSguq9Q5TPpEnyT7FaVvfC'),
+//     new PublicKey('mpPGBiedL26AMGz58EKaLR1X692eVD6QoXwxXm6LWjX'),
+//     new PublicKey('2snK4sppZMRpLMvnGxPiXxCvmbdhtaVCHkPTxZmCq7AZ'),
+//     new PublicKey('AzNjw6AtwrEd36Ec42Cn5GosDe7CHJwfeuoZpx7Mz1Nm'),
+// ];
 // const tokenAccountsArray = [];
 
 const MyWallet: React.FC = () => {
@@ -67,6 +75,10 @@ const MyWallet: React.FC = () => {
     // @ts-ignore
     const program = new Program(idl, programID, provider);
     const localAccount = Keypair.generate();
+
+    useEffect(() => {
+        console.log(program.provider.wallet);
+    }, [program.provider.wallet]);
 
     useEffect(() => {
         console.log('finding token account');
@@ -141,16 +153,24 @@ const MyWallet: React.FC = () => {
         // @ts-ignore
         let stakedTokenList = [];
         for (const token in allStakedTokens) {
-            console.log('single staked token');
-            console.log(allStakedTokens[token]);
+            // console.log('single staked token');
+            // console.log(allStakedTokens[token]);
             if (
                 allStakedTokens[token].account.mint.toString() !== 'coGMtFdR7CuV2sE7eor7w6hzTaEuEugQxu5zEqCF382' &&
-                allStakedTokens[token].account.mint.toString() !== 'GTno8oV1zaL2QaR9j7uMdCcmrVrq68eA33Dux96ePaFv'
+                allStakedTokens[token].account.mint.toString() !== 'GTno8oV1zaL2QaR9j7uMdCcmrVrq68eA33Dux96ePaFv' &&
+                allStakedTokens[token].account.initializerKey.toString() ===
+                    program.provider.wallet.publicKey.toString()
             ) {
                 console.log('valid staked token');
                 console.log(allStakedTokens[token].account.mint.toString());
+
+                // if (
+                //     allStakedTokens[token].account.initializerKey.toString() ===
+                //     program.provider.wallet.publicKey.toString()
+                // ) {
                 // @ts-ignore
                 let stakedTokenObj = [allStakedTokens[token]];
+                // if (stakedTokenObj)
                 try {
                     const tokenmetaPubkey = await Metadata.getPDA(allStakedTokens[token].account.mint);
                     const tokenmeta = await Metadata.load(connection, tokenmetaPubkey);
@@ -169,12 +189,19 @@ const MyWallet: React.FC = () => {
                 } catch (e) {
                     // console.log(e);
                 }
+                // }
             }
         }
         // @ts-ignore
         console.log(stakedTokenList);
         // @ts-ignore
         setStakedTokens(stakedTokenList);
+    };
+
+    // @ts-ignore
+    const collectRewards = async (token) => {
+        await collectTokenRewards(provider, program, token);
+        console.log('collection successful');
     };
 
     const stakeTokens = async () => {
@@ -210,6 +237,7 @@ const MyWallet: React.FC = () => {
         }
         setStakingTokens(tokenKeys);
     };
+
     const selectUnstake = (val: []) => {
         console.log(val);
         let tokenKeys = unstakingTokens;
@@ -312,6 +340,7 @@ const MyWallet: React.FC = () => {
                                                     selectedTokens={unstakingTokens}
                                                     callback={selectUnstake}
                                                     tokens={stakedTokens}
+                                                    rewards={collectRewards}
                                                 />
                                             </div>
                                         )}

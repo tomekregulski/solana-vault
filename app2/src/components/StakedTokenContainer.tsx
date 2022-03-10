@@ -1,6 +1,8 @@
 import React from 'react';
+import * as styles from '../styles/index';
+
 // @ts-ignore
-const StakedTokenContainer = ({ tokens, selectedTokens, callback }) => {
+const StakedTokenContainer = ({ rewards, tokens, selectedTokens, callback }) => {
     // @ts-ignore
     const handleClick = (val) => {
         // @ts-ignore
@@ -35,24 +37,40 @@ const StakedTokenContainer = ({ tokens, selectedTokens, callback }) => {
                         // @ts-ignore
                         tokens.map((token, index) => {
                             return (
-                                <div
-                                    // @ts-ignore
-                                    value={token[0].data.mint}
-                                    // @ts-ignore
-                                    onClick={() => handleClick(token[2])}
+                                <div // @ts-ignore
                                     key={index}
-                                    // @ts-ignore
-                                    style={
-                                        // @ts-ignore
-                                        selectedTokens.includes(token[2]) ? { border: 'solid 1px blue' } : null
-                                    }
                                 >
-                                    <img
-                                        style={{ width: '100px', margin: '5px' }}
-                                        src={token[1].data.image}
-                                        alt="loading..."
+                                    <div
                                         // @ts-ignore
-                                    />
+                                        value={token[0].data.mint}
+                                        onClick={() => handleClick(token[2])}
+                                        // @ts-ignore
+                                        style={
+                                            // @ts-ignore
+                                            selectedTokens.includes(token[2]) ? { border: 'solid 1px blue' } : null
+                                        }
+                                    >
+                                        <img
+                                            style={{ width: '100px', margin: '5px' }}
+                                            src={token[1].data.image}
+                                            alt="loading..."
+                                            // @ts-ignore
+                                        />
+                                    </div>
+                                    <button
+                                        style={{
+                                            background: 'none',
+                                            color: 'white',
+                                            border: '2px solid fuchsia',
+                                            borderRadius: '30px',
+                                            padding: '5px',
+                                            width: '100px',
+                                            margin: '10px 10px',
+                                        }}
+                                        onClick={() => rewards(token)}
+                                    >
+                                        Collect
+                                    </button>
                                 </div>
                             );
                         })

@@ -8,13 +8,7 @@ import {
     // createAssociatedTokenAccount,
     getAccount,
 } from '@solana/spl-token';
-
-import {
-    ownerWalletKeypair,
-    payerKeypair,
-    escrowWalletKeypair,
-    // escrowWallet2Keypair,
-} from './utils/users';
+import { ownerWalletKeypair, payerKeypair, escrowWalletKeypair, rewardMintAuthorityKeypair } from './utils/users';
 
 // let token_mint = '9agr4P3EJ82iJn3vAr9YdfVmfDWgQSrSZMe3UxEDzSpY'; // 1
 // let token_mint = '4y9Mr1wgjzg4Yxiy12aszPoSguq9Q5TPpEnyT7FaVvfC'; // 2
@@ -51,6 +45,9 @@ const initializerMainAccount = ownerWalletKeypair;
 // const initializerMainAccount = anchor.web3.Keypair.generate();
 console.log(initializerMainAccount.publicKey.toString());
 console.log('/////////');
+
+const rewardMint = '5wwzrurTXDNHDDrHw2PS78Ev38Hd9f7askUeVzDsnnQ7';
+const rewardMintPk = new PublicKey(rewardMint);
 
 export const initialize = async (connection: Connection, tokenPk: PublicKey, provider: Provider) => {
     console.log('nft account');
@@ -221,6 +218,48 @@ export const stakeMultipleTokens = async (provider: Provider, program, tokens) =
 
     console.log(allStakedTokens);
     console.log('/////////////////////////');
+};
+
+// @ts-ignore
+export const collectTokenRewards = async (provider: Provider, program, token) => {
+    console.log(token);
+    const nowInSeconds = Math.floor(Date.now() / 1000);
+    const lastRewardCollection = parseInt(token[2].account.lastRewardCollection.toString());
+    const duration = nowInSeconds - lastRewardCollection;
+    console.log(duration);
+
+    const rewardMintAccount = await getMint(provider.connection, rewardMintPk);
+    console.log('rewardMintAccount');
+    console.log(rewardMintAccount);
+
+    const ownerRewardAta = (
+        await provider.connection.getParsedTokenAccountsByOwner(program.provider.wallet.publicKey as PublicKey, {
+            mint: rewardMintPk as PublicKey,
+        })
+    ).value;
+
+    const ownerRewardTokenAccount = await getAccount(provider.connection, ownerRewardAta[0].pubkey);
+
+    console.log(rewardMintAuthorityKeypair.publicKey);
+    console.log(token[2].account.escrowPk);
+    console.log(rewardMintPk);
+    console.log(ownerRewardAta[0].pubkey);
+    // @ts-ignore
+    console.log(ownerRewardTokenAccount.address);
+
+    await program.rpc.distribute(new anchor.BN(duration), {
+        accounts: {
+            authority: rewardMintAuthorityKeypair.publicKey,
+            initializer: initializerMainAccount.publicKey,
+            initializerDepositTokenAccount: token[2].account.initializerDepositTokenAccount,
+            escrowAccount: token[2].account.escrowPk,
+            mint: rewardMintPk,
+            to: ownerRewardAta[0].pubkey,
+            tokenProgram: TOKEN_PROGRAM_ID,
+        },
+        signers: [rewardMintAuthorityKeypair],
+    });
+    console.log('collection successful');
 };
 
 // @ts-ignore
