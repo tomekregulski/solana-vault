@@ -1,19 +1,15 @@
 import React from 'react';
 import * as styles from '../styles/index';
 
-// @ts-ignore
-const StakedTokenContainer = ({ rewards, tokens, selectedTokens, callback }) => {
-    // @ts-ignore
-    const handleClick = (val) => {
-        // @ts-ignore
-        callback(val);
-    };
+import StakedTokenCard from './StakedTokenCard';
 
+// @ts-ignore
+const StakedTokenContainer = ({ rewards, tokens, selectedToken, callback }) => {
     return (
         <div
             style={{
-                width: '400px',
-                height: '300px',
+                width: '600px',
+                height: '500px',
                 display: 'flex',
                 flexDirection: 'column',
                 justifyContent: 'center',
@@ -24,7 +20,7 @@ const StakedTokenContainer = ({ rewards, tokens, selectedTokens, callback }) => 
                 marginLeft: '40px',
             }}
         >
-            {tokens && (
+            {tokens.length ? (
                 <div
                     style={{
                         display: 'flex',
@@ -37,45 +33,76 @@ const StakedTokenContainer = ({ rewards, tokens, selectedTokens, callback }) => 
                         // @ts-ignore
                         tokens.map((token, index) => {
                             return (
-                                <div // @ts-ignore
+                                <StakedTokenCard
                                     key={index}
-                                >
-                                    <div
-                                        // @ts-ignore
-                                        value={token[0].data.mint}
-                                        onClick={() => handleClick(token[2])}
-                                        // @ts-ignore
-                                        style={
-                                            // @ts-ignore
-                                            selectedTokens.includes(token[2]) ? { border: 'solid 1px blue' } : null
-                                        }
-                                    >
-                                        <img
-                                            style={{ width: '100px', margin: '5px' }}
-                                            src={token[1].data.image}
-                                            alt="loading..."
-                                            // @ts-ignore
-                                        />
-                                    </div>
-                                    <button
-                                        style={{
-                                            background: 'none',
-                                            color: 'white',
-                                            border: '2px solid fuchsia',
-                                            borderRadius: '30px',
-                                            padding: '5px',
-                                            width: '100px',
-                                            margin: '10px 10px',
-                                        }}
-                                        onClick={() => rewards(token)}
-                                    >
-                                        Collect
-                                    </button>
-                                </div>
+                                    // @ts-ignore
+                                    rewards={rewards}
+                                    callback={callback}
+                                    token={token}
+                                    // @ts-ignore
+                                    selectedToken={selectedToken}
+                                />
+                                // <div // @ts-ignore
+                                //     key={index}
+                                //     style={{
+                                //         display: 'flex',
+                                //         flexDirection: 'column',
+                                //         justifyContent: 'center',
+                                //         alignItems: 'center',
+                                //     }}
+                                // >
+                                //     <div
+                                //         // @ts-ignore
+                                //         value={token[0].data.mint}
+                                //         onClick={() => handleClick(token[2])}
+                                //         // @ts-ignore
+                                //         style={
+                                //             // @ts-ignore
+                                //             selectedTokens.includes(token[2]) ? { border: 'solid 1px blue' } : null
+                                //         }
+                                //     >
+                                //         <img
+                                //             style={{ width: '100px', margin: '5px' }}
+                                //             src={token[1].data.image}
+                                //             alt="loading..."
+                                //             // @ts-ignore
+                                //         />
+                                //         <div
+                                //             style={{
+                                //                 display: 'flex',
+                                //                 flexDirection: 'column',
+                                //                 justifyContent: 'center',
+                                //                 alignItems: 'center',
+                                //             }}
+                                //         >
+                                //             <span>Rewards:</span>
+                                //             <span>{token[2].account.totalRewardCollected.words[0]}</span>
+                                //             <span>Last Collected:</span>
+                                //             <span>{token[2].account.lastRewardCollection.toString()}</span>
+                                //             <span>{token[2].account.created.toString()}</span>
+                                //         </div>
+                                //     </div>
+                                //     <button
+                                //         style={{
+                                //             background: 'none',
+                                //             color: 'white',
+                                //             border: '2px solid fuchsia',
+                                //             borderRadius: '30px',
+                                //             padding: '5px',
+                                //             width: '100px',
+                                //             margin: '10px 10px',
+                                //         }}
+                                //         onClick={() => rewards(token)}
+                                //     >
+                                //         Collect
+                                //     </button>
+                                // </div>
                             );
                         })
                     }
                 </div>
+            ) : (
+                <span>No Tokens Currently Staked</span>
             )}
         </div>
     );

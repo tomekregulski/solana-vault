@@ -1,17 +1,18 @@
 import React from 'react';
 // @ts-ignore
-const TokenContainer = ({ tokens, selectedTokens, callback }) => {
+const TokenContainer = ({ tokens, selectedToken, callback }) => {
     // @ts-ignore
     const handleClick = (val) => {
+        const action = 'stake';
         // @ts-ignore
-        callback(val);
+        callback(val, action);
     };
 
     return (
         <div
             style={{
-                width: '400px',
-                height: '300px',
+                width: '600px',
+                height: '500px',
                 display: 'flex',
                 flexDirection: 'column',
                 justifyContent: 'center',
@@ -22,7 +23,7 @@ const TokenContainer = ({ tokens, selectedTokens, callback }) => {
                 marginLeft: '40px',
             }}
         >
-            {tokens && (
+            {tokens.length ? (
                 <div
                     style={{
                         display: 'flex',
@@ -37,14 +38,13 @@ const TokenContainer = ({ tokens, selectedTokens, callback }) => {
                             return (
                                 <div
                                     // @ts-ignore
-                                    value={token[0].data.mint}
-                                    // @ts-ignore
                                     onClick={() => handleClick(token[0].data.mint)}
                                     key={index}
                                     // @ts-ignore
                                     style={
                                         // @ts-ignore
-                                        selectedTokens.includes(token[0].data.mint)
+                                        Object.keys(selectedToken).length > 0 &&
+                                        selectedToken.account.data.parsed.info.mint === token[0].data.mint
                                             ? { border: 'solid 1px blue' }
                                             : null
                                     }
@@ -60,6 +60,8 @@ const TokenContainer = ({ tokens, selectedTokens, callback }) => {
                         })
                     }
                 </div>
+            ) : (
+                <span>No Valid Tokens To Stake</span>
             )}
         </div>
     );
